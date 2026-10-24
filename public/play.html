@@ -9,9 +9,9 @@
   <link rel="stylesheet" href="/public/app.css" />
 </head>
 <body>
-<main id="app"></main>
+<main id="app" class="phone"></main>
 <script type="module">
-  import { connect, esc, pad } from "/public/client.js";
+  import { BRANDS, connect, esc, icon, meter, pad, rank } from "/public/client.js";
 
   const app = document.getElementById("app");
   const token = localStorage.getItem("token") ?? crypto.randomUUID();
@@ -41,13 +41,15 @@
   function renderJoin() {
     const { room, name } = saved();
     app.innerHTML = `
-      <form class="sk-card stack" id="join">
+      <form class="sk-hud stack" id="join" data-cabinet="skognet-syndicate">
+        <div class="sk-frame sk-announce"><h2 class="sk-announce-title">INSERT COIN</h2>
+          <p class="sk-announce-sub">ENTER THE ROOM CODE FROM THE BIG SCREEN</p></div>
         <label class="sk-field"><span class="sk-field-label">Room</span>
           <input class="sk-input mono" name="room" maxlength="4" autocapitalize="characters" value="${esc(room)}" required /></label>
         <label class="sk-field"><span class="sk-field-label">Handle</span>
           <input class="sk-input" name="name" maxlength="16" value="${esc(name)}" required /></label>
         ${error ? `<p class="bad">${esc(error)}</p>` : ""}
-        <button class="sk-btn sk-btn-primary">INSERT COIN ▶</button>
+        <button class="sk-btn sk-btn-primary">${icon("play", "sk-icon-16")} JACK IN</button>
       </form>`;
     app.querySelector("#join").onsubmit = (e) => {
       e.preventDefault();
@@ -62,34 +64,59 @@
 
   function render(s) {
     const p = s.players.find((x) => x.id === me);
+    if (!p) return renderJoin();
     const step = s.step;
-    let body = `<p class="dim">Watch the big screen.</p>`;
+    const cabinet = s.quest?.cabinet ?? "skognet-syndicate";
+    let body = `<div class="sk-frame sk-announce"><h2 class="sk-announce-title">STAND BY</h2>
+      <p class="sk-announce-sub">WATCH THE BIG SCREEN</p></div>`;
 
     if (s.phase === "step" && step && !p.answered) {
-      body = step.choices
+      const input = step.choices
         ? `<div class="choice-grid">${step.choices.map((c, i) =>
-            `<button class="sk-btn" data-answer="${i}">${i + 1}. ${esc(c)}</button>`).join("")}</div>`
-        : `<form id="text" class="stack"><input class="sk-input mono" name="v" autocomplete="off" autocapitalize="off" required />
-             <button class="sk-btn sk-btn-primary">RUN ▶</button></form>`;
+            `<button class="sk-btn" data-answer="${i}"><span class="sk-glow-cyan">${i + 1}</span> ${esc(c)}</button>`).join("")}</div>`
+        : `<form id="text" class="stack"><input class="sk-input mono" name="v" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="$ _" required />
+             <button class="sk-btn sk-btn-primary">${icon("play", "sk-icon-16")} RUN</button></form>`;
+      body = `<div class="sk-frame sk-dialogue stack"><div class="sk-dialogue-name">CONTRACT ${step.index + 1} · ${step.xp} XP</div>
+        <p class="sk-dialogue-text">${esc(step.prompt)}</p></div>${input}`;
     } else if (s.phase === "step") {
-      body = `<p>✓ Locked in. Waiting for the crew…</p>`;
+      body = `<div class="sk-frame sk-announce"><h2 class="sk-announce-title">LOCKED IN</h2>
+        <p class="sk-announce-sub">WAITING FOR THE CREW…</p></div>`;
     } else if (s.phase === "reveal") {
-      body = p.correct ? `<p class="ok">★ +${step.xp} XP</p>` : `<p class="bad">✕ Not this time</p>`;
+      body = p.correct
+        ? `<div class="sk-frame sk-announce"><h2 class="sk-announce-title">ACCESS GRANTED!</h2><p class="sk-announce-sub ok">+${step.xp} XP</p></div>`
+        : `<div class="sk-frame sk-announce"><h2 class="sk-announce-title">ACCESS DENIED</h2><p class="sk-announce-sub">NEXT ONE IS YOURS</p></div>`;
+    } else if (s.phase === "done") {
+      body = `<div class="sk-plaque sk-plaque-violet"><span class="sk-plaque-label">RANK</span>
+          <span class="sk-plaque-value">${rank(p.xp, s.quest.maxXp)}</span></div>
+        <div class="sk-plaque sk-plaque-cyan"><span class="sk-plaque-label">LIFETIME XP</span>
+          <span class="sk-plaque-value">${pad(p.lifetime)}</span></div>`;
     }
 
+    document.body.dataset.cabinet = cabinet;
+    const steps = s.quest?.steps.length ?? 0;
+    const doneSteps = !step ? 0 : step.index + (s.phase === "step" ? 0 : 1);
     app.innerHTML = `
-      <div class="row"><span class="sk-badge sk-badge-cyan">${esc(p.name)}</span>
-        <span class="mono">${pad(p.xp)} XP</span><span class="dim mono">room ${esc(s.code)}</span></div>
-      ${step && s.phase !== "lobby" && s.phase !== "done" ? `<p class="prompt">${esc(step.prompt)}</p>` : ""}
-      <section class="sk-card stack">${body}</section>`;
+      <div class="sk-hud" data-cabinet="${cabinet}">
+        <div class="sk-frame sk-hud-bar">
+          <div class="sk-hud-brand">${esc(p.name)}<small>▸ ${BRANDS[cabinet][0].replace(/<br \/>/g, " ")} · ROOM ${esc(s.code)}</small></div>
+          <div class="sk-hud-stats">
+            <div class="sk-stat"><span class="sk-stat-label">XP</span><span></span><span class="sk-stat-value">${pad(p.xp)}</span></div>
+            ${steps ? `<div class="sk-stat"><span class="sk-stat-label">STEP</span>${meter(doneSteps, steps)}<span></span></div>` : ""}
+          </div>
+        </div>
+        ${body}
+      </div>`;
 
     app.querySelectorAll("[data-answer]").forEach((b) =>
       (b.onclick = () => send({ type: "answer", value: Number(b.dataset.answer) })));
     const form = app.querySelector("#text");
-    if (form) form.onsubmit = (e) => {
-      e.preventDefault();
-      send({ type: "answer", value: String(new FormData(form).get("v")) });
-    };
+    if (form) {
+      form.querySelector("input").focus();
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        send({ type: "answer", value: String(new FormData(form).get("v")) });
+      };
+    }
   }
 </script>
 </body>

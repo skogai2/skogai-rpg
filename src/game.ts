@@ -3,7 +3,8 @@
 export type ChoiceStep = { kind: "choice"; prompt: string; choices: string[]; answer: number; xp: number };
 export type TextStep = { kind: "text"; prompt: string; match: string; hint?: string; xp: number };
 export type Step = ChoiceStep | TextStep;
-export type Quest = { id: string; title: string; steps: Step[] };
+export type Cabinet = "sudo-hero" | "wifi-wizards" | "honkers-hackers" | "skognet-syndicate";
+export type Quest = { id: string; title: string; cabinet?: Cabinet; steps: Step[] };
 
 export type Player = { name: string; connected: boolean; answer: string | number | null; xp: number };
 export type Phase = "lobby" | "step" | "reveal" | "done";
@@ -94,6 +95,14 @@ export const allAnswered = (room: Room) => {
   return live.length > 0 && live.every((p) => p.answer !== null);
 };
 
+const summary = (q: Quest) => ({
+  id: q.id,
+  title: q.title,
+  cabinet: q.cabinet ?? "sudo-hero",
+  steps: q.steps.map((s) => ({ kind: s.kind, xp: s.xp })),
+  maxXp: q.steps.reduce((n, s) => n + s.xp, 0),
+});
+
 // What clients see. Answers stay hidden until reveal.
 export function view(room: Room, quests: Record<string, Quest>, profiles: Record<string, Profile>) {
   const quest = room.quest ? quests[room.quest] : undefined;
@@ -102,8 +111,8 @@ export function view(room: Room, quests: Record<string, Quest>, profiles: Record
   return {
     code: room.code,
     phase: room.phase,
-    quests: Object.values(quests).map((q) => ({ id: q.id, title: q.title, steps: q.steps.length })),
-    quest: quest ? { id: quest.id, title: quest.title, steps: quest.steps.length } : null,
+    quests: Object.values(quests).map(summary),
+    quest: quest ? summary(quest) : null,
     step: step && {
       index: room.step,
       kind: step.kind,

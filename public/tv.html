@@ -10,13 +10,13 @@
 <body>
 <main id="app"><p class="dim">Booting cabinet…</p></main>
 <script type="module">
-  import { connect, esc, pad } from "/public/client.js";
+  import { BRANDS, SCENES, connect, esc, icon, meter, pad, rank } from "/public/client.js";
 
   const app = document.getElementById("app");
   let joinUrl = "";
 
   const send = connect({
-    onOpen: (send) => send({ type: "host", room: sessionStorage.getItem("room") }),
+    onOpen: (send) => send({ type: "host", room: new URLSearchParams(location.search).get("room") ?? sessionStorage.getItem("room") }),
     onMessage(msg) {
       if (msg.type === "hosted") {
         sessionStorage.setItem("room", msg.room);
@@ -31,48 +31,129 @@
     if (b) send(JSON.parse(b.dataset.msg));
   });
 
-  const playerRow = (p, s) => `
-    <div class="row">
-      <span class="sk-badge ${p.connected ? "sk-badge-cyan" : "sk-badge-muted"}">${esc(p.name)}</span>
-      <span class="mono">${pad(p.xp)} XP</span>
-      <span class="dim mono">lifetime ${pad(p.lifetime)}</span>
-      ${s.phase === "step" ? `<span>${p.answered ? "✓ locked" : "…"}</span>` : ""}
-      ${p.correct === true ? `<span class="ok">★ correct</span>` : p.correct === false ? `<span class="bad">✕</span>` : ""}
-    </div>`;
+  const btn = (cls, msg, label) =>
+    `<button class="sk-btn ${cls}" data-msg='${esc(JSON.stringify(msg))}'>${label}</button>`;
+
+  function bar(s, cabinet) {
+    const [brand, sub] = BRANDS[cabinet];
+    const live = s.players.filter((p) => p.connected).length;
+    const progress = s.quest
+      ? `<div class="sk-stat"><span class="sk-stat-label">STEP</span>${meter(s.step ? s.step.index + (s.phase === "step" ? 0 : 1) : 0, s.quest.steps.length)}<span class="sk-stat-value">${s.step ? s.step.index + 1 : 0}/${s.quest.steps.length}</span></div>`
+      : "";
+    return `
+      <div class="sk-frame sk-hud-bar">
+        <div class="sk-hud-avatar">${icon("chip", "sk-icon-32")}</div>
+        <div class="sk-hud-brand">${brand}<small>▸ ${sub}</small></div>
+        <div class="sk-hud-stats">
+          <div class="sk-stat"><span class="sk-stat-label">ROOM</span><span></span><span class="sk-stat-value tv-code">${esc(s.code)}</span></div>
+          <div class="sk-stat"><span class="sk-stat-label">CREW</span><span></span><span class="sk-stat-value">${live}/${s.players.length}</span></div>
+          ${progress}
+        </div>
+      </div>`;
+  }
+
+  // Quest strip: one tile per step, done / active / locked.
+  function strip(s) {
+    if (!s.quest) return "";
+    const at = s.step?.index ?? 0;
+    const tiles = s.quest.steps.map((st, i) => {
+      const done = i < at || (i === at && s.phase !== "step");
+      const state = done ? "sk-quest-done" : i === at ? "sk-quest-active" : "sk-quest-locked";
+      const ico = done ? icon("check") : i === at ? icon("cursor") : icon("key");
+      return `<div class="sk-quest ${state}"><div class="sk-quest-icon">${ico}</div>
+        <div><div class="sk-quest-title">STEP ${i + 1}</div><div class="sk-quest-meta">${st.kind === "text" ? "TYPE IT" : "PICK ONE"} · ${st.xp} XP</div></div></div>`;
+    });
+    return `<div class="sk-quest-strip" style="grid-template-columns:repeat(${tiles.length},1fr)">${tiles.join("")}</div>`;
+  }
+
+  function crew(s) {
+    if (!s.players.length) return `<div class="sk-frame grow">WAITING FOR HACKERS…</div>`;
+    return s.players.map((p) => {
+      const status = s.phase === "done" ? ""
+        : s.phase === "step"
+        ? (p.answered ? `<span class="done">${icon("check", "sk-icon-16")}</span>` : `<span class="dim">…</span>`)
+        : p.correct === true ? `<span class="done">${icon("star", "sk-icon-16")}</span>`
+        : p.correct === false ? `<span class="bad">✕</span>` : "";
+      return `<div class="sk-frame ${p.connected ? "" : "offline"}">${esc(p.name)} <span class="mono">${pad(p.xp)}</span> ${status}</div>`;
+    }).join("");
+  }
+
+  function lobby(s) {
+    return `
+      <div class="sk-frame sk-announce">
+        <h2 class="sk-announce-title">INSERT COIN</h2>
+        <p class="sk-announce-sub">JOIN ON YOUR PHONE · ROOM ${esc(s.code)}<br /><span class="mono">${esc(joinUrl)}?room=${esc(s.code)}</span></p>
+      </div>
+      ${picks(s)}`;
+  }
+
+  function picks(s) {
+    const tiles = s.quests.map((q) => `
+      <div class="sk-quest sk-quest-active">
+        <div class="sk-quest-icon">${icon("play")}</div>
+        <div class="stack">
+          <div class="sk-quest-title">${esc(q.title)}</div>
+          <div class="sk-quest-meta">${BRANDS[q.cabinet][0].replace(/<br \/>/g, " ")} · ${q.steps.length} STEPS · ${q.maxXp} XP</div>
+          ${btn("sk-btn-primary", { type: "start", quest: q.id }, `${icon("play", "sk-icon-16")} START`)}
+        </div>
+      </div>`).join("");
+    return `<div class="sk-quest-strip" style="grid-template-columns:repeat(${Math.min(s.quests.length, 3)},1fr)">${tiles}</div>`;
+  }
+
+  function step(s) {
+    const st = s.step;
+    const answered = s.players.filter((p) => p.answered).length;
+    const choices = st.choices
+      ? `<div class="choice-grid two">${st.choices.map((c, i) =>
+          `<div class="sk-frame choice ${st.answer === i ? "correct" : st.answer !== undefined ? "wrong" : ""}"><span class="sk-glow-cyan">${i + 1}</span> ${esc(c)}</div>`).join("")}</div>`
+      : st.answer !== undefined ? `<div class="sk-terminal-block mono">$ ${esc(st.answer)}</div>`
+      : `<div class="sk-terminal-block mono">$ <span class="cursor">_</span></div>`;
+    const announce = s.phase === "reveal"
+      ? `<div class="sk-frame sk-announce"><h2 class="sk-announce-title">ACCESS GRANTED!</h2>
+           <p class="sk-announce-sub">${s.players.filter((p) => p.correct).length} OF ${s.players.length} CRACKED IT · +${st.xp} XP EACH</p></div>`
+      : "";
+    return `
+      ${announce}
+      <div class="sk-frame sk-dialogue">
+        <div class="sk-dialogue-portrait">${icon(st.kind === "text" ? "chip" : "key", "sk-icon-40")}</div>
+        <div class="stack">
+          <div class="sk-dialogue-name">CONTRACT ${st.index + 1} · ${st.xp} XP</div>
+          <p class="sk-dialogue-text">${esc(st.prompt)}</p>
+          ${choices}
+        </div>
+      </div>
+      <div class="row">${s.phase === "step"
+        ? `${btn("sk-btn-secondary", { type: "reveal" }, "REVEAL")}<span class="dim mono">${answered}/${s.players.length} LOCKED IN</span>`
+        : btn("sk-btn-primary", { type: "next" }, `NEXT ${icon("chevron-right", "sk-icon-16")}`)}</div>`;
+  }
+
+  function done(s) {
+    const board = [...s.players].sort((a, b) => b.xp - a.xp);
+    const plaques = board.map((p, i) => `
+      <div class="sk-plaque ${i === 0 ? "sk-plaque-violet" : "sk-plaque-cyan"}">
+        <span class="sk-plaque-label">${i === 0 ? "MVP · " : ""}${esc(p.name)}</span>
+        <span class="sk-plaque-value">${rank(p.xp, s.quest.maxXp)} · ${pad(p.xp)}</span>
+        <span class="sk-plaque-label">LIFETIME ${pad(p.lifetime)}</span>
+      </div>`).join("");
+    return `
+      <div class="sk-frame sk-announce"><h2 class="sk-announce-title">QUEST COMPLETE!</h2>
+        <p class="sk-announce-sub">${esc(s.quest.title).toUpperCase()}</p></div>
+      <div class="plaques">${plaques}</div>
+      ${picks(s)}`;
+  }
 
   function render(s) {
-    const players = s.players.map((p) => playerRow(p, s)).join("") || `<p class="dim">Waiting for hackers…</p>`;
-    const step = s.step;
-    let stage = "";
-
-    if (s.phase === "lobby" || s.phase === "done") {
-      stage = `
-        ${s.phase === "done" ? `<h2 class="sk-card-title">QUEST COMPLETE ★</h2>` : ""}
-        <div class="row">${s.quests.map((q) =>
-          `<button class="sk-btn sk-btn-primary" data-msg='${esc(JSON.stringify({ type: "start", quest: q.id }))}'>▶ ${esc(q.title)}</button>`
-        ).join("")}</div>`;
-    } else if (step) {
-      const choices = step.choices
-        ? `<div class="choice-grid">${step.choices.map((c, i) =>
-            `<div class="sk-btn ${step.answer === i ? "correct" : ""}">${i + 1}. ${esc(c)}</div>`).join("")}</div>`
-        : step.answer !== undefined ? `<p class="mono ok">${esc(step.answer)}</p>` : `<p class="dim">Type it on your phone.</p>`;
-      stage = `
-        <p class="dim mono">${esc(s.quest.title)} · ${step.index + 1}/${s.quest.steps} · ${step.xp} XP</p>
-        <p class="prompt">${esc(step.prompt)}</p>
-        ${choices}
-        <div class="row">${s.phase === "step"
-          ? `<button class="sk-btn sk-btn-secondary" data-msg='{"type":"reveal"}'>REVEAL</button>`
-          : `<button class="sk-btn sk-btn-primary" data-msg='{"type":"next"}'>NEXT ▸</button>`}</div>`;
-    }
-
+    const cabinet = s.quest?.cabinet ?? "skognet-syndicate";
+    document.body.dataset.cabinet = cabinet;
+    const body = s.phase === "lobby" ? lobby(s) : s.phase === "done" ? done(s) : step(s);
     app.innerHTML = `
-      <img class="scene" src="/design/assets/scene-sudo-hero.png" alt="" />
-      <div class="row">
-        <div class="code">${esc(s.code)}</div>
-        <div class="stack"><span class="dim">join on your phone</span><span class="mono">${esc(joinUrl)}?room=${esc(s.code)}</span></div>
-      </div>
-      <section class="sk-card stack">${stage}</section>
-      <section class="sk-card stack">${players}</section>`;
+      <div class="sk-hud" data-cabinet="${cabinet}">
+        ${bar(s, cabinet)}
+        <div class="sk-hud-stage ${s.phase === "lobby" ? "sk-hud-stage-tall" : "sk-hud-stage-short"}"><img src="${SCENES[cabinet]}" alt="" /></div>
+        ${body}
+        ${strip(s)}
+        <div class="sk-hud-foot">${crew(s)}</div>
+      </div>`;
   }
 </script>
 </body>

@@ -1,6 +1,7 @@
 {
   "id": "first-boot",
   "title": "First boot: tame the chores",
+  "cabinet": "sudo-hero",
   "steps": [
     {
       "kind": "choice",
