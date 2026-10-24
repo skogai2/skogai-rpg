@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>skogai rpg · tv</title>
+  <link rel="stylesheet" href="/design/colors_and_type.css" />
+  <link rel="stylesheet" href="/design/components.css" />
+  <link rel="stylesheet" href="/public/app.css" />
+</head>
+<body>
+<main id="app"><p class="dim">Booting cabinet…</p></main>
+<script type="module">
+  import { connect, esc, pad } from "/public/client.js";
+
+  const app = document.getElementById("app");
+  let joinUrl = "";
+
+  const send = connect({
+    onOpen: (send) => send({ type: "host", room: sessionStorage.getItem("room") }),
+    onMessage(msg) {
+      if (msg.type === "hosted") {
+        sessionStorage.setItem("room", msg.room);
+        joinUrl = msg.joinUrl;
+      }
+      if (msg.type === "state") render(msg.state);
+    },
+  });
+
+  app.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-msg]");
+    if (b) send(JSON.parse(b.dataset.msg));
+  });
+
+  const playerRow = (p, s) => `
+    <div class="row">
+      <span class="sk-badge ${p.connected ? "sk-badge-cyan" : "sk-badge-muted"}">${esc(p.name)}</span>
+      <span class="mono">${pad(p.xp)} XP</span>
+      <span class="dim mono">lifetime ${pad(p.lifetime)}</span>
+      ${s.phase === "step" ? `<span>${p.answered ? "✓ locked" : "…"}</span>` : ""}
+      ${p.correct === true ? `<span class="ok">★ correct</span>` : p.correct === false ? `<span class="bad">✕</span>` : ""}
+    </div>`;
+
+  function render(s) {
+    const players = s.players.map((p) => playerRow(p, s)).join("") || `<p class="dim">Waiting for hackers…</p>`;
+    const step = s.step;
+    let stage = "";
+
+    if (s.phase === "lobby" || s.phase === "done") {
+      stage = `
+        ${s.phase === "done" ? `<h2 class="sk-card-title">QUEST COMPLETE ★</h2>` : ""}
+        <div class="row">${s.quests.map((q) =>
+          `<button class="sk-btn sk-btn-primary" data-msg='${esc(JSON.stringify({ type: "start", quest: q.id }))}'>▶ ${esc(q.title)}</button>`
+        ).join("")}</div>`;
+    } else if (step) {
+      const choices = step.choices
+        ? `<div class="choice-grid">${step.choices.map((c, i) =>
+            `<div class="sk-btn ${step.answer === i ? "correct" : ""}">${i + 1}. ${esc(c)}</div>`).join("")}</div>`
+        : step.answer !== undefined ? `<p class="mono ok">${esc(step.answer)}</p>` : `<p class="dim">Type it on your phone.</p>`;
+      stage = `
+        <p class="dim mono">${esc(s.quest.title)} · ${step.index + 1}/${s.quest.steps} · ${step.xp} XP</p>
+        <p class="prompt">${esc(step.prompt)}</p>
+        ${choices}
+        <div class="row">${s.phase === "step"
+          ? `<button class="sk-btn sk-btn-secondary" data-msg='{"type":"reveal"}'>REVEAL</button>`
+          : `<button class="sk-btn sk-btn-primary" data-msg='{"type":"next"}'>NEXT ▸</button>`}</div>`;
+    }
+
+    app.innerHTML = `
+      <img class="scene" src="/design/assets/scene-sudo-hero.png" alt="" />
+      <div class="row">
+        <div class="code">${esc(s.code)}</div>
+        <div class="stack"><span class="dim">join on your phone</span><span class="mono">${esc(joinUrl)}?room=${esc(s.code)}</span></div>
+      </div>
+      <section class="sk-card stack">${stage}</section>
+      <section class="sk-card stack">${players}</section>`;
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "skogai-rpg",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "archive": "bun src/archive.ts",
+    "test": "bun test"
+  }
+}

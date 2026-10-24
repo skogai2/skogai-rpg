@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>skogai rpg · play</title>
+  <link rel="stylesheet" href="/design/colors_and_type.css" />
+  <link rel="stylesheet" href="/design/components.css" />
+  <link rel="stylesheet" href="/public/app.css" />
+</head>
+<body>
+<main id="app"></main>
+<script type="module">
+  import { connect, esc, pad } from "/public/client.js";
+
+  const app = document.getElementById("app");
+  const token = localStorage.getItem("token") ?? crypto.randomUUID();
+  localStorage.setItem("token", token);
+  const saved = () => ({
+    room: new URLSearchParams(location.search).get("room") ?? localStorage.getItem("room") ?? "",
+    name: localStorage.getItem("name") ?? "",
+  });
+  let me = null;
+  let error = "";
+
+  const join = (room, name) => send({ type: "join", room, name, token });
+
+  const send = connect({
+    onOpen() {
+      const { room, name } = saved();
+      if (room && name && me) join(room, name);
+      else renderJoin();
+    },
+    onMessage(msg) {
+      if (msg.type === "joined") me = msg.player;
+      if (msg.type === "error") { error = msg.message; if (!me) renderJoin(); }
+      if (msg.type === "state" && me) render(msg.state);
+    },
+  });
+
+  function renderJoin() {
+    const { room, name } = saved();
+    app.innerHTML = `
+      <form class="sk-card stack" id="join">
+        <label class="sk-field"><span class="sk-field-label">Room</span>
+          <input class="sk-input mono" name="room" maxlength="4" autocapitalize="characters" value="${esc(room)}" required /></label>
+        <label class="sk-field"><span class="sk-field-label">Handle</span>
+          <input class="sk-input" name="name" maxlength="16" value="${esc(name)}" required /></label>
+        ${error ? `<p class="bad">${esc(error)}</p>` : ""}
+        <button class="sk-btn sk-btn-primary">INSERT COIN ▶</button>
+      </form>`;
+    app.querySelector("#join").onsubmit = (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const r = String(f.get("room")).toUpperCase(), n = String(f.get("name"));
+      localStorage.setItem("room", r);
+      localStorage.setItem("name", n);
+      error = "";
+      join(r, n);
+    };
+  }
+
+  function render(s) {
+    const p = s.players.find((x) => x.id === me);
+    const step = s.step;
+    let body = `<p class="dim">Watch the big screen.</p>`;
+
+    if (s.phase === "step" && step && !p.answered) {
+      body = step.choices
+        ? `<div class="choice-grid">${step.choices.map((c, i) =>
+            `<button class="sk-btn" data-answer="${i}">${i + 1}. ${esc(c)}</button>`).join("")}</div>`
+        : `<form id="text" class="stack"><input class="sk-input mono" name="v" autocomplete="off" autocapitalize="off" required />
+             <button class="sk-btn sk-btn-primary">RUN ▶</button></form>`;
+    } else if (s.phase === "step") {
+      body = `<p>✓ Locked in. Waiting for the crew…</p>`;
+    } else if (s.phase === "reveal") {
+      body = p.correct ? `<p class="ok">★ +${step.xp} XP</p>` : `<p class="bad">✕ Not this time</p>`;
+    }
+
+    app.innerHTML = `
+      <div class="row"><span class="sk-badge sk-badge-cyan">${esc(p.name)}</span>
+        <span class="mono">${pad(p.xp)} XP</span><span class="dim mono">room ${esc(s.code)}</span></div>
+      ${step && s.phase !== "lobby" && s.phase !== "done" ? `<p class="prompt">${esc(step.prompt)}</p>` : ""}
+      <section class="sk-card stack">${body}</section>`;
+
+    app.querySelectorAll("[data-answer]").forEach((b) =>
+      (b.onclick = () => send({ type: "answer", value: Number(b.dataset.answer) })));
+    const form = app.querySelector("#text");
+    if (form) form.onsubmit = (e) => {
+      e.preventDefault();
+      send({ type: "answer", value: String(new FormData(form).get("v")) });
+    };
+  }
+</script>
+</body>
+</html>
