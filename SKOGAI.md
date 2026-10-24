@@ -16,22 +16,28 @@ the hard part will *NOT* be how to create a variable or learn the syntax to crea
 ## example directory structure
 
 ```tree
-skogai.md
-.skogai
-<game>/
-  src/
-    state/
-    assets/
-    design/
-  docs/
-  tests/
-  tools/
-  prototypes/
-memory/
-docs/
-knowledge/
-state/
-tests/
+├── design
+│   ├── assets
+│   │   └── fonts
+│   ├── fonts
+│   ├── preview
+│   └── uploads
+├── docs
+├── inspiration
+│   └── web
+├── knowledge
+├── memory
+├── public
+├── quests
+├── skogrpg
+│   ├── docs
+│   ├── src
+│   ├── test
+│   └── tools
+├── src
+├── state
+├── test
+└── tests
 ```
 
 
