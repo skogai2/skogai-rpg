@@ -13,34 +13,6 @@ the hard part will *NOT* be how to create a variable or learn the syntax to crea
 
 *the only focus from start to finish are on creating a framework around giving ai agents just enough structure so they always are guided towards the next step step - and the tools and freedom needed to have as many options to get there as possible*
 
-## example directory structure
-
-```tree
-├── design
-│   ├── assets
-│   │   └── fonts
-│   ├── fonts
-│   ├── preview
-│   └── uploads
-├── docs
-├── inspiration
-│   └── web
-├── knowledge
-├── memory
-├── public
-├── quests
-├── skogrpg
-│   ├── docs
-│   ├── src
-│   ├── test
-│   └── tools
-├── src
-├── state
-├── test
-└── tests
-```
-
-
 ## example skogai definitions
 
 - full turn; from one party end their turn with a ending message, thus giving away their initiative, and until the other have done the same by ending their turn and returning the initiative back.

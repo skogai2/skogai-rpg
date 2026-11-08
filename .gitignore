@@ -4,3 +4,4 @@ node_modules/
 /package-lock.json
 /.skogix
 /.skogai/logs/skogai-core/log.jsonl
+/.skogai/logs/skogai-core/log.jsonl
